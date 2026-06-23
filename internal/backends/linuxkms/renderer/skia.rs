@@ -80,6 +80,7 @@ impl SkiaRendererAdapter {
                 surface_target,
                 size,
                 requested_graphics_api.cloned(),
+                false,
             )?);
         #[cfg(skia_wgpu_28)]
         let skia_wgpu_surface =
@@ -87,6 +88,7 @@ impl SkiaRendererAdapter {
                 surface_target,
                 size,
                 requested_graphics_api.cloned(),
+                false,
             )?);
 
         let renderer = Box::new(Self {

@@ -224,6 +224,7 @@ impl AndroidWindowAdapter {
                         Arc::new(DummyDisplayHandle),
                         size,
                         self.requested_graphics_api.borrow().clone(),
+                        false,
                     )?;
                     self.resize()?;
 

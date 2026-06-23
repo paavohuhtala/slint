@@ -41,6 +41,7 @@ impl WGPUSurface {
         surface_target: impl Into<i_slint_core::graphics::wgpu_29::SurfaceTarget>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        transparent: bool,
     ) -> Result<Self, PlatformError> {
         let (instance, adapter, device, queue, surface) =
             i_slint_core::graphics::wgpu_29::init_instance_adapter_device_queue_surface(
@@ -67,6 +68,14 @@ impl WGPUSurface {
             .copied()
             .unwrap_or_else(|| swapchain_capabilities.formats[0]);
         surface_config.format = swapchain_format;
+        if transparent {
+            let alpha_modes = &swapchain_capabilities.alpha_modes;
+            if alpha_modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied) {
+                surface_config.alpha_mode = wgpu::CompositeAlphaMode::PreMultiplied;
+            } else if alpha_modes.contains(&wgpu::CompositeAlphaMode::PostMultiplied) {
+                surface_config.alpha_mode = wgpu::CompositeAlphaMode::PostMultiplied;
+            }
+        }
         surface.configure(&device, &surface_config);
 
         let backend: Backend = adapter.get_info().backend.try_into()?;
@@ -139,12 +148,14 @@ impl crate::Surface for WGPUSurface {
         display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Send + Sync>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        transparent: bool,
     ) -> Result<Self, PlatformError> {
         Self::new_with_surface(
             Box::new(WindowAndDisplayHandle(window_handle, display_handle))
                 as Box<dyn wgpu::DisplayAndWindowHandle + 'static>,
             size,
             requested_graphics_api,
+            transparent,
         )
     }
 

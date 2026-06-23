@@ -91,6 +91,7 @@ fn create_default_surface(
     display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Sync + Send>,
     size: PhysicalWindowSize,
     requested_graphics_api: Option<RequestedGraphicsAPI>,
+    transparent: bool,
 ) -> Result<Box<dyn Surface>, PlatformError> {
     match DefaultSurface::new(
         context,
@@ -98,6 +99,7 @@ fn create_default_surface(
         display_handle.clone(),
         size,
         requested_graphics_api,
+        transparent,
     ) {
         Ok(gpu_surface) => Ok(Box::new(gpu_surface) as Box<dyn Surface>),
         #[cfg(skia_backend_softbuffer)]
@@ -112,6 +114,7 @@ fn create_default_surface(
                 display_handle,
                 size,
                 None,
+                transparent,
             )
             .map(|r| Box::new(r) as Box<dyn Surface>)
         }
@@ -181,6 +184,7 @@ pub struct SkiaRenderer {
         display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Send + Sync>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        transparent: bool,
     ) -> Result<Box<dyn Surface>, PlatformError>,
     pre_present_callback: RefCell<Option<Box<dyn FnMut()>>>,
     partial_rendering_state: Option<PartialRenderingState>,
@@ -229,13 +233,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 software_surface::SoftwareSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -264,13 +270,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 opengl_surface::OpenGLSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -299,13 +307,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 metal_surface::MetalSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -334,13 +344,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 vulkan_surface::VulkanSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -369,13 +381,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 d3d_surface::D3DSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -404,13 +418,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 wgpu_28_surface::WGPUSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -439,13 +455,15 @@ impl SkiaRenderer {
                               window_handle,
                               display_handle,
                               size,
-                              requested_graphics_api| {
+                              requested_graphics_api,
+                              transparent| {
                 wgpu_29_surface::WGPUSurface::new(
                     context,
                     window_handle,
                     display_handle,
                     size,
                     requested_graphics_api,
+                    transparent,
                 )
                 .map(|r| Box::new(r) as Box<dyn Surface>)
             },
@@ -466,7 +484,7 @@ impl SkiaRenderer {
     ) -> Result<Self, PlatformError> {
         Ok(Self::new_with_surface(
             context,
-            create_default_surface(context, window_handle, display_handle, size, None)?,
+            create_default_surface(context, window_handle, display_handle, size, None, false)?,
         ))
     }
 
@@ -486,7 +504,7 @@ impl SkiaRenderer {
             rendering_metrics_collector: Default::default(),
             rendering_first_time: Cell::new(true),
             surface: RefCell::new(Some(surface)),
-            surface_factory: |_, _, _, _, _| {
+            surface_factory: |_, _, _, _, _, _| {
                 Err("Skia renderer constructed with surface does not support dynamic surface re-creation".into())
             },
             pre_present_callback: Default::default(),
@@ -548,6 +566,7 @@ impl SkiaRenderer {
         display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Send + Sync>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        transparent: bool,
     ) -> Result<(), PlatformError> {
         // just in case
         self.suspend()?;
@@ -557,6 +576,7 @@ impl SkiaRenderer {
             display_handle,
             size,
             requested_graphics_api,
+            transparent,
         )?;
         self.set_surface(surface);
         Ok(())
@@ -1061,6 +1081,7 @@ pub trait Surface {
         display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Sync + Send>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        transparent: bool,
     ) -> Result<Self, PlatformError>
     where
         Self: Sized;

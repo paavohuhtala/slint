@@ -266,6 +266,7 @@ impl super::Surface for D3DSurface {
         _display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Send + Sync>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        _transparent: bool,
     ) -> Result<Self, i_slint_core::platform::PlatformError> {
         if requested_graphics_api
             .map_or(false, |api| !matches!(api, RequestedGraphicsAPI::Direct3D))

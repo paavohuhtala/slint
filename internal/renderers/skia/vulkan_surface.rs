@@ -219,6 +219,7 @@ impl super::Surface for VulkanSurface {
         display_handle: Arc<dyn raw_window_handle::HasDisplayHandle + Send + Sync>,
         size: PhysicalWindowSize,
         requested_graphics_api: Option<RequestedGraphicsAPI>,
+        _transparent: bool,
     ) -> Result<Self, i_slint_core::platform::PlatformError> {
         if requested_graphics_api.is_some_and(|api| !matches!(api, RequestedGraphicsAPI::Vulkan)) {
             return Err("Requested non-Vulkan rendering with Vulkan renderer".into());
