@@ -214,6 +214,55 @@ impl From<Box<dyn wgpu::DisplayAndWindowHandle + 'static>> for SurfaceTarget {
     }
 }
 
+/// Native compositor layers (Windows DirectComposition) for a transparent window.
+///
+/// When the Skia+wgpu renderer creates a transparent window surface on Windows it owns the window's
+/// DirectComposition tree and prepares an underlay visual (beneath Slint's surface) and an overlay visual
+/// (above it). The application renders into these — the engine viewport into the underlay (shown through
+/// transparent regions), content drawn over the chrome into the overlay — off Slint's redraw path, by
+/// wrapping a visual as `wgpu::SurfaceTargetUnsafe::CompositionVisual`. The renderer publishes the handles
+/// here, keyed by the window's `HWND`; the application reads them via [`get`]. The raw `IDComposition*`
+/// pointers are stored as `usize` (they aren't `Send`) and are valid only on the main thread that created
+/// them.
+#[cfg(all(target_family = "windows", feature = "unstable-wgpu-29"))]
+pub mod windows_layers {
+    use std::sync::Mutex;
+    use std::vec::Vec;
+
+    /// The composition handles the application renders the underlay / overlay into.
+    #[derive(Clone, Copy, Debug)]
+    pub struct LayerHandles {
+        /// `IDCompositionVisual` (as `usize`) beneath Slint's surface — for the engine viewport.
+        pub underlay: usize,
+        /// `IDCompositionVisual` (as `usize`) above Slint's surface — for content drawn over the chrome.
+        pub overlay: usize,
+        /// `IDCompositionDevice` (as `usize`) owning the tree. Commit it on the main thread after
+        /// (re)configuring a visual's swapchain; per-frame `present()` needs no commit.
+        pub device: usize,
+    }
+
+    static REGISTRY: Mutex<Vec<(usize, LayerHandles)>> = Mutex::new(Vec::new());
+
+    /// Publish the handles for `hwnd` (called by the renderer after building the tree).
+    pub fn publish(hwnd: usize, handles: LayerHandles) {
+        let mut reg = REGISTRY.lock().unwrap();
+        reg.retain(|(h, _)| *h != hwnd);
+        reg.push((hwnd, handles));
+    }
+
+    /// Read (without removing) the handles for `hwnd`, if the renderer published any.
+    pub fn get(hwnd: usize) -> Option<LayerHandles> {
+        REGISTRY.lock().unwrap().iter().find(|(h, _)| *h == hwnd).map(|&(_, v)| v)
+    }
+
+    /// Remove and return the handles for `hwnd` (e.g. on window teardown).
+    pub fn take(hwnd: usize) -> Option<LayerHandles> {
+        let mut reg = REGISTRY.lock().unwrap();
+        let idx = reg.iter().position(|(h, _)| *h == hwnd)?;
+        Some(reg.swap_remove(idx).1)
+    }
+}
+
 /// Internal helper function to initialize the wgpu instance/adapter/device/queue from either scratch or
 /// developer-provided config. This is called by any renderer intending to support WGPU.
 pub fn init_instance_adapter_device_queue_surface(

@@ -625,6 +625,11 @@ pub mod wgpu_29 {
     //!```
     //!
     pub use i_slint_core::graphics::wgpu_29::api::*;
+
+    /// Native compositor layers (Windows): the DirectComposition underlay/overlay visuals the Skia+wgpu
+    /// renderer prepares for a transparent window, for rendering beneath and above Slint. See the module.
+    #[cfg(target_family = "windows")]
+    pub use i_slint_core::graphics::wgpu_29::windows_layers;
 }
 
 #[cfg(feature = "unstable-winit-030")]

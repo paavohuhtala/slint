@@ -18,6 +18,8 @@ use crate::SkiaSharedContext;
 
 #[cfg(target_family = "windows")]
 mod dx12;
+#[cfg(target_family = "windows")]
+mod dcomp_layers;
 #[cfg(target_vendor = "apple")]
 mod metal;
 #[cfg(all(target_family = "unix", not(target_vendor = "apple")))]
@@ -34,6 +36,10 @@ pub struct WGPUSurface {
     surface: Option<wgpu::Surface<'static>>,
     textures_to_transition_for_sampling: RefCell<Vec<wgpu::Texture>>,
     pub(crate) backend: Backend,
+    // The composition tree we own for a transparent window, committed after each (re)configure. `None`
+    // for opaque windows (the surface came from the window handle and wgpu owns the composition).
+    #[cfg(target_family = "windows")]
+    dcomp_layers: RefCell<Option<dcomp_layers::DCompLayers>>,
 }
 
 impl WGPUSurface {
@@ -95,6 +101,8 @@ impl WGPUSurface {
             surface: Some(surface),
             textures_to_transition_for_sampling: RefCell::new(Vec::new()),
             backend,
+            #[cfg(target_family = "windows")]
+            dcomp_layers: RefCell::new(None),
         })
     }
 
@@ -114,6 +122,8 @@ impl WGPUSurface {
             surface: None,
             textures_to_transition_for_sampling: RefCell::new(Vec::new()),
             backend,
+            #[cfg(target_family = "windows")]
+            dcomp_layers: RefCell::new(None),
         }
     }
 
@@ -150,6 +160,36 @@ impl crate::Surface for WGPUSurface {
         requested_graphics_api: Option<RequestedGraphicsAPI>,
         transparent: bool,
     ) -> Result<Self, PlatformError> {
+        // For a transparent window, own the HWND's DirectComposition tree (rather than let wgpu build its
+        // own from the window handle) so the application can render into visuals beneath and above Slint's
+        // surface. Slint renders into the surface visual via `CompositionVisual`. On any failure, fall
+        // back to the default window surface.
+        #[cfg(target_family = "windows")]
+        if transparent {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            if let Ok(RawWindowHandle::Win32(h)) = window_handle.window_handle().map(|h| h.as_raw()) {
+                let hwnd = windows::Win32::Foundation::HWND(h.hwnd.get() as *mut core::ffi::c_void);
+                match dcomp_layers::setup(hwnd) {
+                    Ok((layers, surface_visual_ptr)) => {
+                        let target = i_slint_core::graphics::wgpu_29::SurfaceTarget::Drm(
+                            wgpu::SurfaceTargetUnsafe::CompositionVisual(surface_visual_ptr),
+                        );
+                        let this =
+                            Self::new_with_surface(target, size, requested_graphics_api, transparent)?;
+                        layers.commit();
+                        *this.dcomp_layers.borrow_mut() = Some(layers);
+                        return Ok(this);
+                    }
+                    Err(err) => {
+                        i_slint_core::debug_log!(
+                            "native-layers: DirectComposition setup failed ({err}); \
+                             falling back to the default window surface"
+                        );
+                    }
+                }
+            }
+        }
+
         Self::new_with_surface(
             Box::new(WindowAndDisplayHandle(window_handle, display_handle))
                 as Box<dyn wgpu::DisplayAndWindowHandle + 'static>,
@@ -189,6 +229,14 @@ impl crate::Surface for WGPUSurface {
         surface_config.height = size.height;
 
         surface.configure(&self.device, surface_config);
+
+        // wgpu re-set the swapchain content on the surface visual but does not commit the
+        // `CompositionVisual` path; commit so the resized surface shows.
+        #[cfg(target_family = "windows")]
+        if let Some(layers) = self.dcomp_layers.borrow().as_ref() {
+            layers.commit();
+        }
+
         Ok(())
     }
 
